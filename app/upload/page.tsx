@@ -31,6 +31,7 @@ export default function UploadPage() {
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "images">("all");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchFiles = useCallback(async () => {
@@ -51,9 +52,10 @@ export default function UploadPage() {
     fetchFiles();
   }, [fetchFiles]);
 
-  const handleUpload = async (fileList: FileList | null) => {
+  const handleUpload = useCallback(async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
     setUploading(true);
+    setError(null);
 
     try {
       for (const file of Array.from(fileList)) {
@@ -64,17 +66,18 @@ export default function UploadPage() {
           body: formData,
         });
         if (!res.ok) {
-          const err = await res.json();
-          console.error("Upload failed:", err);
+          const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+          setError(`Upload failed: ${err.error || res.statusText}`);
+          return;
         }
       }
       await fetchFiles();
     } catch (err) {
-      console.error("Upload error:", err);
+      setError(`Upload error: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
       setUploading(false);
     }
-  };
+  }, [fetchFiles]);
 
   const handleDelete = async (url: string) => {
     try {
@@ -114,8 +117,7 @@ export default function UploadPage() {
       setDragActive(false);
       handleUpload(e.dataTransfer.files);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    [handleUpload]
   );
 
   const filteredFiles =
@@ -168,6 +170,13 @@ export default function UploadPage() {
           </div>
         )}
       </div>
+
+      {/* Error message */}
+      {error && (
+        <div className="mt-4 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Filter & Files */}
       <div className="mt-10">
