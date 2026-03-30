@@ -1,11 +1,17 @@
-// Clerk middleware disabled — auth handled per-route via auth()
-// Same pattern as mission-control (Clerk dev instance domain restrictions)
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-export default function middleware(_request: NextRequest) {
-  return NextResponse.next();
-}
+const isProtectedRoute = createRouteMatcher([
+  "/upload(.*)",
+  "/api/upload(.*)",
+  "/api/files(.*)",
+  "/api/delete(.*)",
+]);
+
+export default clerkMiddleware(async (auth, request) => {
+  if (isProtectedRoute(request)) {
+    await auth.protect();
+  }
+});
 
 export const config = {
   matcher: [
