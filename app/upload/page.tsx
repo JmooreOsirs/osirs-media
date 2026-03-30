@@ -52,10 +52,31 @@ export default function UploadPage() {
     fetchFiles();
   }, [fetchFiles]);
 
+  const MAX_SIZE_MB = 50;
+  const ALLOWED_TYPES = [
+    "image/jpeg", "image/png", "image/gif", "image/webp",
+    "image/svg+xml", "image/avif", "image/ico",
+    "video/mp4", "video/webm", "video/quicktime",
+    "application/pdf",
+  ];
+
   const handleUpload = useCallback(async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
-    setUploading(true);
     setError(null);
+
+    // Client-side validation
+    for (const file of Array.from(fileList)) {
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        setError(`"${file.name}" is not a supported file type. Allowed: images, video (MP4/WebM), PDF.`);
+        return;
+      }
+      if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+        setError(`"${file.name}" is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max size is ${MAX_SIZE_MB} MB.`);
+        return;
+      }
+    }
+
+    setUploading(true);
 
     try {
       for (const file of Array.from(fileList)) {
@@ -160,7 +181,7 @@ export default function UploadPage() {
             : "Drag & drop files here"}
         </p>
         <p className="text-sm text-white/50">
-          or click to browse • Images (JPG, PNG, GIF, WebP, SVG) & Video
+          or click to browse • Images, Video (MP4/WebM), PDF • Max 50 MB
         </p>
         {uploading && (
           <div className="mt-4">
