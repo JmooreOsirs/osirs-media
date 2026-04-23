@@ -1,73 +1,52 @@
-import { put } from "@vercel/blob";
+import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { auth } from "@clerk/nextjs/server";
 
-export async function POST(req: Request) {
+const ALLOWED_CONTENT_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/tiff",
+  "image/svg+xml",
+  "image/avif",
+  "application/pdf",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+  "application/octet-stream",
+];
+
+const MAX_BYTES = 2 * 1024 * 1024 * 1024;
+
+export async function POST(request: Request): Promise<Response> {
+  const body = (await request.json()) as HandleUploadBody;
+
   try {
-    const { userId } = await auth();
-    
-    // Clear error message for unauthenticated requests
-    if (!userId) {
-      return Response.json(
-        { error: "Unauthorized - Please log in to upload files" },
-        { status: 401 }
-      );
-    }
+    const jsonResponse = await handleUpload({
+      body,
+      request,
+      onBeforeGenerateToken: async (pathname) => {
+        const { userId } = await auth();
+        if (!userId) {
+          throw new Error("Unauthorized - Please log in to upload files");
+        }
 
-    const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
-    if (!blobToken) {
-      return Response.json(
-        { error: "Blob storage not configured (missing BLOB_READ_WRITE_TOKEN)" },
-        { status: 500 }
-      );
-    }
-
-    const form = await req.formData();
-    const file = form.get("file") as File;
-    
-    if (!file) {
-      return Response.json(
-        { error: "No file provided" },
-        { status: 400 }
-      );
-    }
-
-    // Check file size (500MB limit)
-    const MAX_SIZE = 500 * 1024 * 1024; // 500MB
-    if (file.size > MAX_SIZE) {
-      return Response.json(
-        { error: `File too large. Maximum size is 500MB, got ${(file.size / 1024 / 1024).toFixed(2)}MB` },
-        { status: 413 }
-      );
-    }
-
-    // Check file type
-    const ALLOWED_TYPES = [
-      "image/png",
-      "image/jpeg",
-      "image/gif",
-      "image/tiff",
-      "image/svg+xml",
-      "application/pdf",
-      "video/mp4",
-      "video/quicktime", // .mov
-    ];
-
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return Response.json(
-        { error: `File type not allowed. Supported: PNG, JPG, GIF, TIFF, SVG, PDF, MP4, MOV. Got: ${file.type}` },
-        { status: 415 }
-      );
-    }
-
-    const blob = await put(file.name, file, {
-      access: "public",
-      token: blobToken,
+        return {
+          allowedContentTypes: ALLOWED_CONTENT_TYPES,
+          maximumSizeInBytes: MAX_BYTES,
+          addRandomSuffix: true,
+          tokenPayload: JSON.stringify({ userId, pathname }),
+        };
+      },
+      onUploadCompleted: async ({ blob }) => {
+        console.log("Upload completed:", blob.url);
+      },
     });
 
-    return Response.json({ url: blob.url, pathname: blob.pathname });
+    return Response.json(jsonResponse);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Upload error:", message);
-    return Response.json({ error: `Upload failed: ${message}` }, { status: 500 });
+    return Response.json({ error: message }, { status: 400 });
   }
 }

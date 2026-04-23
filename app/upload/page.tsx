@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Upload, Copy, Trash2, Check, Image, FileIcon, Filter } from "lucide-react";
+import { upload } from "@vercel/blob/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -52,22 +53,42 @@ export default function UploadPage() {
     fetchFiles();
   }, [fetchFiles]);
 
-  const MAX_SIZE_MB = 50;
-  const ALLOWED_TYPES = [
-    "image/jpeg", "image/png", "image/gif", "image/webp",
-    "image/svg+xml", "image/avif", "image/ico",
-    "video/mp4", "video/webm", "video/quicktime",
-    "application/pdf",
+  const MAX_SIZE_MB = 2048;
+  const ALLOWED_EXTENSIONS = [
+    "jpg", "jpeg", "png", "gif", "webp", "svg", "avif", "tiff", "tif",
+    "mp4", "mov", "webm",
+    "pdf",
   ];
+
+  const inferContentType = (file: File): string => {
+    if (file.type) return file.type;
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    const map: Record<string, string> = {
+      mov: "video/quicktime",
+      mp4: "video/mp4",
+      webm: "video/webm",
+      pdf: "application/pdf",
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      gif: "image/gif",
+      webp: "image/webp",
+      svg: "image/svg+xml",
+      avif: "image/avif",
+      tiff: "image/tiff",
+      tif: "image/tiff",
+    };
+    return (ext && map[ext]) || "application/octet-stream";
+  };
 
   const handleUpload = useCallback(async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
     setError(null);
 
-    // Client-side validation
     for (const file of Array.from(fileList)) {
-      if (!ALLOWED_TYPES.includes(file.type)) {
-        setError(`"${file.name}" is not a supported file type. Allowed: images, video (MP4/WebM), PDF.`);
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      if (!ALLOWED_EXTENSIONS.includes(ext)) {
+        setError(`"${file.name}" is not a supported file type. Allowed: images, video (MP4/MOV/WebM), PDF.`);
         return;
       }
       if (file.size > MAX_SIZE_MB * 1024 * 1024) {
@@ -80,17 +101,11 @@ export default function UploadPage() {
 
     try {
       for (const file of Array.from(fileList)) {
-        const formData = new FormData();
-        formData.append("file", file);
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
+        await upload(file.name, file, {
+          access: "public",
+          handleUploadUrl: "/api/upload",
+          contentType: inferContentType(file),
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-          setError(`Upload failed: ${err.error || res.statusText}`);
-          return;
-        }
       }
       await fetchFiles();
     } catch (err) {
@@ -163,7 +178,7 @@ export default function UploadPage() {
           ref={fileInputRef}
           type="file"
           multiple
-          accept="image/*,video/*"
+          accept="image/*,video/mp4,video/quicktime,video/webm,.mov,application/pdf"
           className="hidden"
           onChange={(e) => handleUpload(e.target.files)}
         />
@@ -181,7 +196,7 @@ export default function UploadPage() {
             : "Drag & drop files here"}
         </p>
         <p className="text-sm text-white/50">
-          or click to browse • Images, Video (MP4/WebM), PDF • Max 50 MB
+          or click to browse • Images, Video (MP4/MOV/WebM), PDF • Max 2 GB
         </p>
         {uploading && (
           <div className="mt-4">
