@@ -28,6 +28,8 @@ function isImage(pathname: string): boolean {
 export default function UploadPage() {
   const [files, setFiles] = useState<BlobFile[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [uploadingName, setUploadingName] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "images">("all");
@@ -98,13 +100,20 @@ export default function UploadPage() {
     }
 
     setUploading(true);
+    setProgress(0);
 
     try {
       for (const file of Array.from(fileList)) {
+        setUploadingName(file.name);
+        setProgress(0);
         await upload(file.name, file, {
           access: "public",
           handleUploadUrl: "/api/upload",
           contentType: inferContentType(file),
+          multipart: true,
+          onUploadProgress: ({ percentage }) => {
+            setProgress(percentage);
+          },
         });
       }
       await fetchFiles();
@@ -112,6 +121,8 @@ export default function UploadPage() {
       setError(`Upload error: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
       setUploading(false);
+      setUploadingName(null);
+      setProgress(0);
     }
   }, [fetchFiles]);
 
@@ -190,7 +201,9 @@ export default function UploadPage() {
         />
         <p className="text-lg font-medium mb-1">
           {uploading
-            ? "Uploading..."
+            ? uploadingName
+              ? `Uploading ${uploadingName}`
+              : "Uploading..."
             : dragActive
             ? "Drop files here"
             : "Drag & drop files here"}
@@ -200,9 +213,15 @@ export default function UploadPage() {
         </p>
         {uploading && (
           <div className="mt-4">
-            <div className="w-48 mx-auto h-1.5 bg-white/10 rounded-full overflow-hidden">
-              <div className="h-full bg-blue-500 rounded-full animate-pulse w-3/4" />
+            <div className="w-64 mx-auto h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full transition-all duration-200"
+                style={{ width: `${Math.max(2, Math.round(progress))}%` }}
+              />
             </div>
+            <p className="mt-2 text-xs text-white/50 tabular-nums">
+              {Math.round(progress)}%
+            </p>
           </div>
         )}
       </div>
